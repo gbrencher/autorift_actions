@@ -52,6 +52,20 @@ jobs:
               with:
                 cache-environment: true
                 environment-file: environment.yml
+            
+            - name: Create .netrc for Earthdata
+              env: 
+                EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+                EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD}}
+              run: |
+                umask 077
+                cat > ~/.netrc <<EOF
+                machine urs.earthdata.nasa.gov
+                  login ${EARTHDATA_USERNAME}
+                  password ${EARTHDATA_PASSWORD}
+                EOF
+                # curl/GDAL require strict perms; verify:
+                ls -l ~/.netrc
 
             - name: Modify autoRIFT Package
             # current release has deprecated numpy functions https://github.com/nasa-jpl/autoRIFT/issues/97
