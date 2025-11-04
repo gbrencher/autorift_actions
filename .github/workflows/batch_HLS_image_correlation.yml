@@ -1,6 +1,6 @@
 # Batch process many image pairs
 name: batch_HLS_image_correlation
-run-name: batch HLS image correlation ${{ inputs.npairs }} connections
+run-name: batch HLS image correlation
 
 on:
   workflow_dispatch:
