@@ -47,7 +47,7 @@ def main():
     search = stac.search(
         collections=["HLSS30.v2.0", "HLSL30.v2.0"],
         intersects=aoi,
-        query={"eo:cloud_cover": {"lt": 10}},
+        query={"eo:cloud_cover": {"lt": float(args.cloud_cover)}},
         max_items=2000,
     )
     
