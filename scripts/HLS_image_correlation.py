@@ -21,16 +21,16 @@ from osgeo import gdal
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
-gdal.SetConfigOption('GDAL_HTTP_COOKIEFILE','~/cookies.txt')
-gdal.SetConfigOption('GDAL_HTTP_COOKIEJAR', '~/cookies.txt')
-gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN','EMPTY_DIR')
-gdal.SetConfigOption('CPL_VSIL_CURL_ALLOWED_EXTENSIONS','TIF')
-gdal.SetConfigOption('GDAL_HTTP_UNSAFESSL', 'YES')
-
 def download_hls(img1_date, img2_date, aoi):
     '''
     Download a pair of HLS images acquired on given dates over a given area of interest
     '''
+    gdal.SetConfigOption('GDAL_HTTP_COOKIEFILE','~/cookies.txt')
+    gdal.SetConfigOption('GDAL_HTTP_COOKIEJAR', '~/cookies.txt')
+    gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN','EMPTY_DIR')
+    gdal.SetConfigOption('CPL_VSIL_CURL_ALLOWED_EXTENSIONS','TIF')
+    gdal.SetConfigOption('GDAL_HTTP_UNSAFESSL', 'YES')
+    
     aoi_gpd = gpd.GeoDataFrame({'geometry':[shape(aoi)]}).set_crs(crs="EPSG:4326")
     crs = aoi_gpd.estimate_utm_crs()
     
