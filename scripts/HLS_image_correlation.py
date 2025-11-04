@@ -15,6 +15,7 @@ from shapely.geometry import shape
 import warnings
 import argparse
 import numpy as np
+from osgeo import gdal
 
 # silence some warnings from stackstac and autoRIFT
 warnings.filterwarnings("ignore", category=RuntimeWarning)
