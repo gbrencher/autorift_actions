@@ -22,12 +22,16 @@ on:
             description: last month of year to search for images
             default: '9'
             options: ['1','2','3','4','5','6','7','8','9','10','11','12']
-        npairs:
-            type: choice
+        min_days:
+            type: string
             required: true
-            description: number of pairs per image
-            default: '1'
-            options: ['5', '4', '3','2','1']
+            description: minimum temporal baseline (days)
+            default: '25'
+        max_days:
+            type: string
+            required: true
+            description: maximum temporal baseline (days)
+            default: '100'
             
 jobs:
   # The output of this job is a JSON mapping for a matrix job
@@ -66,7 +70,7 @@ jobs:
       - name: Search LP DAAC for HLS Imagery
         id: HLS_search
         run: | 
-          python -u scripts/HLS_search.py ${{ inputs.cloud_cover }} ${{ inputs.start_month }} ${{ inputs.stop_month }} ${{ inputs.npairs }}
+          python -u scripts/HLS_search.py ${{ inputs.cloud_cover }} ${{ inputs.start_month }} ${{ inputs.stop_month }} ${{ inputs.min_days }} ${{ inputs.max_days }}
 
   # A matrix job that calls a reuseable workflow
   autoRIFT:
