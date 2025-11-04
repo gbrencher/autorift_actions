@@ -1,6 +1,6 @@
 # Batch process many image pairs
-name: batch_image_correlation
-run-name: batch image correlation ${{ inputs.npairs }} connections
+name: batch_s2_image_correlation
+run-name: batch s2 image correlation ${{ inputs.npairs }} connections
 
 on:
   workflow_dispatch:
@@ -52,7 +52,7 @@ jobs:
       - name: Search aws for S2 Imagery
         id: S2_search
         run: | 
-          python -u s2_search.py ${{ inputs.cloud_cover }} ${{ inputs.start_month }} ${{ inputs.stop_month }} ${{ inputs.npairs }}
+          python -u scripts/s2_search.py ${{ inputs.cloud_cover }} ${{ inputs.start_month }} ${{ inputs.stop_month }} ${{ inputs.npairs }}
 
   # A matrix job that calls a reuseable workflow
   autoRIFT:
