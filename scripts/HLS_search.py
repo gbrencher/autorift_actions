@@ -66,7 +66,7 @@ def main():
 
     # calculate number of valid pixels in each image
     total_pixels = len(ds.y)*len(ds.x)
-    nan_count = (~np.isnan(s2_ds.B04)).sum(dim=['x', 'y']).compute()
+    nan_count = (~np.isnan(ds.B04)).sum(dim=['x', 'y']).compute()
     # keep only images with 90% or more valid pixels
     ds = ds.where(nan_count >= total_pixels*0.9, drop=True)
 
