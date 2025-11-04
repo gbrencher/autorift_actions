@@ -80,6 +80,7 @@ jobs:
       matrix: ${{ fromJson(needs.HLS_search.outputs.MATRIX) }}
     name: ${{ matrix.name }}
     uses: ./.github/workflows/HLS_image_correlation_pair.yml
+    secrets: inherit
     with:
       img1_date: ${{ matrix.img1_date }}
       img2_date: ${{ matrix.img2_date }} 
