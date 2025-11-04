@@ -63,7 +63,7 @@ jobs:
           # curl/GDAL require strict perms; verify:
           ls -l ~/.netrc
 
-      - name: Search aws for HLS Imagery
+      - name: Search LP DAAC for HLS Imagery
         id: HLS_search
         run: | 
           python -u scripts/HLS_search.py ${{ inputs.cloud_cover }} ${{ inputs.start_month }} ${{ inputs.stop_month }} ${{ inputs.npairs }}
