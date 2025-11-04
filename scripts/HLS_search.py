@@ -14,7 +14,8 @@ def get_parser():
     parser.add_argument("cloud_cover", type=str, help="percent cloud cover allowed in images (0-100)")
     parser.add_argument("start_month", type=str, help="first month of year to search for images")
     parser.add_argument("stop_month", type=str, help="last month of year to search for images")
-    parser.add_argument("npairs", type=str, help="number of pairs per image")
+    parser.add_argument("min_days", type=str, help="minumum temporal baseline (days)")
+    parser.add_argument("max_days", type=str, help="maximum temporal baseline (days)")
     return parser
 
 def main():
@@ -75,18 +76,28 @@ def main():
 
     # get dates of acceptable images
     image_dates = ds_study_period.time.dt.strftime('%Y-%m-%d').values.tolist()
+    time_vals = ds_study_period.time.values
     print('\n'.join(image_dates))
     
     # Create Matrix Job Mapping (JSON Array)
     pairs = []
-    for r in range(len(ds_study_period.time) - int(args.npairs)):
-        for s in range(1, int(args.npairs) + 1 ):
-            t_baseline = ds_study_period.isel(time=r+s).time - ds_study_period.isel(time=r).time
-            if t_baseline.dt.days <= 100: #t baseline threshold
-                img1_date = image_dates[r]
-                img2_date = image_dates[r+s]
-                shortname = f'{img1_date}_{img2_date}'
-                pairs.append({'img1_date': img1_date, 'img2_date': img2_date, 'name':shortname})
+    # For each anchor index i, advance j>i while baseline <= max_days
+    n = len(time_vals)
+    for i in range(n - 1):
+        ti = np.datetime64(time_vals[i], 'D')
+        # start j at i+1 and walk forward until baseline exceeds max_days
+        for j in range(i + 1, n):
+            tj = np.datetime64(time_vals[j], 'D')
+            dt_days = (tj - ti).astype(int)
+            if dt_days < int(args.min_days):
+                continue
+            if dt_days > int(args.max_days):
+                break  # further j will only increase baseline
+            # baseline within range
+            img1_date = image_dates[i]
+            img2_date = image_dates[j]
+            shortname = f"{img1_date}_{img2_date}"
+            pairs.append({'img1_date': img1_date, 'img2_date': img2_date, 'name': shortname})
     matrixJSON = f'{{"include":{json.dumps(pairs)}}}'
     print(f'number of image pairs: {len(pairs)}')
     
