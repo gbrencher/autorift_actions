@@ -15,6 +15,8 @@ import numpy as np
 def get_parser():
     parser = argparse.ArgumentParser(description="Search for Sentinel-2 images")
     parser.add_argument("cloud_cover", type=str, help="percent cloud cover allowed in images (0-100)")
+    parser.add_argument("start_year", type=str, help="first year to search for images (min 2015)")
+    parser.add_argument("end_year", type=str, help="last year to search for images")
     parser.add_argument("start_month", type=str, help="first month of year to search for images")
     parser.add_argument("stop_month", type=str, help="last month of year to search for images")
     parser.add_argument("min_days", type=str, help="minumum temporal baseline (days)")
@@ -47,6 +49,7 @@ def main():
     # search planetary computer
     search = stac.search(
         intersects=aoi,
+        datetime=f'{args.start_year}-01-01/{args.end_year}-12-31',
         collections=["sentinel-2-l2a"],
         query={"eo:cloud_cover": {"lt": float(args.cloud_cover)}})
 
