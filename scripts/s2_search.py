@@ -69,6 +69,9 @@ def main():
     else:
         # wrap-around case (e.g., December–February)
         s2_ds = s2_ds.where((s2_ds.time.dt.month >= start_m) | (s2_ds.time.dt.month <= stop_m), drop=True)
+
+    # mask cloud
+    s2_ds = s2_ds.where(~s2_ds.SCL.isin([8, 9]), other=np.nan)
     
     # calculate number of valid pixels in each image
     total_pixels = len(s2_ds.y)*len(s2_ds.x)
