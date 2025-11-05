@@ -110,6 +110,9 @@ def run_autoRIFT(img1, img2, skip_x=1, skip_y=1, min_x_chip=8, max_x_chip=32,
     obj.runAutorift()
     print("autoRIFT complete")
 
+    obj.Dx[obj.InterpMask == 0] = np.nan
+    obj.Dy[obj.InterpMask == 0] = np.nan
+
     # convert displacement to m
     obj.Dx_m = obj.Dx * 10
     obj.Dy_m = obj.Dy * 10
