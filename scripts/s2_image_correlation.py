@@ -41,6 +41,7 @@ def download_s2(img1_date, img2_date, aoi):
                             chunks={"x": 2048, "y": 2048},
                             bbox=aoi_gpd.total_bounds,
                             groupby='solar_day').where(lambda x: x > 0, other=np.nan)
+    img1_ds = img1_ds.where(~img1_ds.scl.isin([8, 9]), other=np.nan)
     
     search = stac.search(intersects=aoi,
                          datetime=img2_date,
@@ -52,6 +53,7 @@ def download_s2(img1_date, img2_date, aoi):
                             chunks={"x": 2048, "y": 2048},
                             bbox=aoi_gpd.total_bounds,
                             groupby='solar_day').where(lambda x: x > 0, other=np.nan)
+    img2_ds = img2_ds.where(~img2_ds.scl.isin([8, 9]), other=np.nan)
 
     return img1_ds, img2_ds 
 
