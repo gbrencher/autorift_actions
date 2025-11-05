@@ -15,7 +15,7 @@ on:
             required: true
             description: first year to search for images
             default: '2015'
-        end_year:
+        stop_year:
             type: string
             required: true
             description: last year to search for images
@@ -66,7 +66,7 @@ jobs:
       - name: Search planetary computer for S2 Imagery
         id: S2_search
         run: | 
-          python -u scripts/s2_search.py ${{ inputs.cloud_cover }} ${{ inputs.start_month }} ${{ inputs.stop_month }} ${{ inputs.min_days }} ${{ inputs.max_days }}
+          python -u scripts/s2_search.py ${{ inputs.cloud_cover }} ${{ inputs.start_year }} ${{ inputs.stop_year }} ${{ inputs.start_month }} ${{ inputs.stop_month }} ${{ inputs.min_days }} ${{ inputs.max_days }}
 
   # A matrix job that calls a reuseable workflow
   autoRIFT:
