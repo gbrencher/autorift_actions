@@ -101,6 +101,16 @@ def run_autoRIFT(img1, img2, skip_x=1, skip_y=1, min_x_chip=8, max_x_chip=32,
     obj.Dy0[noDataMask] = 0
     obj.NoDataMask = noDataMask
 
+    # Consensus gate (NDC) — require more neighbor agreement in a larger window
+    obj.FiltWidth = 11        # was 5; must be odd
+    obj.FracValid = 0.32     # was 0.32 (=8/25)
+    
+    # Displacement-distance count tolerance (stricter local consistency)
+    obj.FracSearch = 0.20    # was 0.20
+    
+    # MAD outlier gate (tighter)
+    obj.MadScalar = 3.0      # was 4
+
     print("preprocessing images")
     obj.WallisFilterWidth = preproc_filter_width
     obj.preprocess_filt_lap() # preprocessing with laplacian filter
@@ -109,9 +119,6 @@ def run_autoRIFT(img1, img2, skip_x=1, skip_y=1, min_x_chip=8, max_x_chip=32,
     print("starting autoRIFT")
     obj.runAutorift()
     print("autoRIFT complete")
-
-    obj.Dx[obj.InterpMask == 0] = np.nan
-    obj.Dy[obj.InterpMask == 0] = np.nan
 
     # convert displacement to m
     obj.Dx_m = obj.Dx * 10
