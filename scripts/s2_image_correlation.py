@@ -55,7 +55,7 @@ def download_s2(img1_date, img2_date, aoi):
 
     return img1_ds, img2_ds 
 
-def run_autoRIFT(img1, img2, skip_x=2, skip_y=2, min_x_chip=16, max_x_chip=64,
+def run_autoRIFT(img1, img2, skip_x=1, skip_y=1, min_x_chip=16, max_x_chip=64,
                  preproc_filter_width=3, mpflag=4, search_limit_x=30, search_limit_y=30):
     '''
     Configure and run autoRIFT feature tracking with Sentinel-2 data for large mountain glaciers
@@ -161,16 +161,14 @@ def main():
 
     # hardcoding a bbox for now
     aoi = {
-    "type": "Polygon",
-    "coordinates": [
-          [
-            [-121.85308124466923,46.94373134954458],
-            [-121.85308124466923,46.785391494446145],
-            [-121.63845508457872,46.785391494446145],
-            [-121.63845508457872,46.94373134954458],
-            [-121.85308124466923,46.94373134954458]
-          ]
-        ],
+        "type": "Polygon",
+        "coordinates": [
+            [[-121.76644001937807,46.83837147698088],
+            [-121.6594983841296,46.83837147698088],
+            [-121.6594983841296,46.8948204721259],
+            [-121.76644001937807,46.8948204721259],
+            [-121.76644001937807,46.83837147698088]]
+        ]
     }
 
     # download Sentinel-2 images
