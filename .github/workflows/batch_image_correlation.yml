@@ -10,6 +10,16 @@ on:
             required: true
             description: percent cloud cover allowed in images (0-100)
             default: '10'
+        start_year:
+            type: string
+            required: true
+            description: first year to search for images
+            default: '2015'
+        end_year:
+            type: string
+            required: true
+            description: last year to search for images
+            default: '2025'
         start_month:
             type: choice
             required: true
