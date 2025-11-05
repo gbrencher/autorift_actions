@@ -178,7 +178,8 @@ def main():
     img2 = img2_ds.B08.squeeze().values
     
     # scale search limit with temporal baseline assuming max velocity 1000 m/yr (100 px/yr)
-    search_limit_x = search_limit_y = round(((((img2_ds.time.isel(time=0) - img1_ds.time.isel(time=0)).dt.days)*60)/365.25).item())
+    t_baseline = (img2_ds.time.isel(time=0) - img1_ds.time.isel(time=0)).dt.days
+    search_limit_x = search_limit_y = round(((t_baseline/365.25)*60).item())
     
     # run autoRIFT feature tracking
     obj = run_autoRIFT(img1, img2, search_limit_x=search_limit_x, search_limit_y=search_limit_y)

@@ -59,15 +59,22 @@ def main():
                           bbox=aoi_gpd.total_bounds,
                           groupby='solar_day').where(lambda x: x > 0, other=np.nan)
     print(f"Returned {len(s2_ds.time)} acquisitions")
+
+    start_m = int(args.start_month)
+    stop_m  = int(args.stop_month)
+
+    if start_m <= stop_m:
+        # simple case (e.g., May–September)
+        s2_ds = s2_ds.where((s2_ds.time.dt.month >= start_m) & (s2_ds.time.dt.month <= stop_m), drop=True)
+    else:
+        # wrap-around case (e.g., December–February)
+        s2_ds = s2_ds.where((s2_ds.time.dt.month >= start_m) | (s2_ds.time.dt.month <= stop_m), drop=True)
     
     # calculate number of valid pixels in each image
     total_pixels = len(s2_ds.y)*len(s2_ds.x)
     nan_count = (~np.isnan(s2_ds.B08)).sum(dim=['x', 'y']).compute()
     # keep only images with 90% or more valid pixels
     s2_ds = s2_ds.where(nan_count >= total_pixels*0.9, drop=True)
-
-    # filter to specified month range
-    s2_ds = s2_ds.where((s2_ds.time.dt.month >= int(args.start_month)) & (s2_ds.time.dt.month <= int(args.stop_month)), drop=True)
 
     # get dates of acceptable images
     image_dates = s2_ds.time.dt.strftime('%Y-%m-%d').values.tolist()
