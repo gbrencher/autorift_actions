@@ -17,7 +17,8 @@ def get_parser():
     parser.add_argument("cloud_cover", type=str, help="percent cloud cover allowed in images (0-100)")
     parser.add_argument("start_month", type=str, help="first month of year to search for images")
     parser.add_argument("stop_month", type=str, help="last month of year to search for images")
-    parser.add_argument("npairs", type=str, help="number of pairs per image")
+    parser.add_argument("min_days", type=str, help="minumum temporal baseline (days)")
+    parser.add_argument("max_days", type=str, help="maximum temporal baseline (days)")
     return parser
 
 def main():
@@ -28,11 +29,12 @@ def main():
     aoi = {
         "type": "Polygon",
         "coordinates": [
-            [[-121.85308124466923,46.94373134954458],
-            [-121.85308124466923,46.785391494446145],
-            [-121.63845508457872,46.785391494446145],
-            [-121.63845508457872,46.94373134954458],
-            [-121.85308124466923,46.94373134954458]]]
+            [[-121.76644001937807,46.83837147698088],
+            [-121.6594983841296,46.83837147698088],
+            [-121.6594983841296,46.8948204721259],
+            [-121.76644001937807,46.8948204721259],
+            [-121.76644001937807,46.83837147698088]]
+        ]
     }
 
     aoi_gpd = gpd.GeoDataFrame({'geometry':[shape(aoi)]}).set_crs(crs="EPSG:4326")
@@ -62,22 +64,32 @@ def main():
     s2_ds = s2_ds.where(nan_count >= total_pixels*0.9, drop=True)
 
     # filter to specified month range
-    s2_ds_snowoff = s2_ds.where((s2_ds.time.dt.month >= int(args.start_month)) & (s2_ds.time.dt.month <= int(args.stop_month)), drop=True)
+    s2_ds = s2_ds.where((s2_ds.time.dt.month >= int(args.start_month)) & (s2_ds.time.dt.month <= int(args.stop_month)), drop=True)
 
     # get dates of acceptable images
-    image_dates = s2_ds_snowoff.time.dt.strftime('%Y-%m-%d').values.tolist()
+    image_dates = s2_ds.time.dt.strftime('%Y-%m-%d').values.tolist()
+    time_vals = s2_ds.time.values
     print('\n'.join(image_dates))
     
     # Create Matrix Job Mapping (JSON Array)
     pairs = []
-    for r in range(len(s2_ds_snowoff.time) - int(args.npairs)):
-        for s in range(1, int(args.npairs) + 1 ):
-            t_baseline = s2_ds_snowoff.isel(time=r+s).time - s2_ds_snowoff.isel(time=r).time
-            if t_baseline.dt.days <= 100: #t baseline threshold
-                img1_date = image_dates[r]
-                img2_date = image_dates[r+s]
-                shortname = f'{img1_date}_{img2_date}'
-                pairs.append({'img1_date': img1_date, 'img2_date': img2_date, 'name':shortname})
+    # For each anchor index i, advance j>i while baseline <= max_days
+    n = len(time_vals)
+    for i in range(n - 1):
+        ti = np.datetime64(time_vals[i], 'D')
+        # start j at i+1 and walk forward until baseline exceeds max_days
+        for j in range(i + 1, n):
+            tj = np.datetime64(time_vals[j], 'D')
+            dt_days = (tj - ti).astype(int)
+            if dt_days < int(args.min_days):
+                continue
+            if dt_days > int(args.max_days):
+                break  # further j will only increase baseline
+            # baseline within range
+            img1_date = image_dates[i]
+            img2_date = image_dates[j]
+            shortname = f"{img1_date}_{img2_date}"
+            pairs.append({'img1_date': img1_date, 'img2_date': img2_date, 'name': shortname})
     matrixJSON = f'{{"include":{json.dumps(pairs)}}}'
     print(f'number of image pairs: {len(pairs)}')
     

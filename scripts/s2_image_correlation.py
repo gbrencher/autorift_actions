@@ -188,7 +188,8 @@ def main():
     ds = prep_outputs(obj, img1_ds, img2_ds)
 
     # write out velocity to tif
-    ds.veloc_horizontal.rio.to_raster(f'S2_{args.img1_date}_{args.img2_date}_horizontal_velocity.tif')
+    ds.veloc_x.rio.to_raster(f'S2_{args.img1_date}_{args.img2_date}_veloc_x.tif')
+    ds.veloc_y.rio.to_raster(f'S2_{args.img1_date}_{args.img2_date}_veloc_y.tif')
 
 if __name__ == "__main__":
    main()
