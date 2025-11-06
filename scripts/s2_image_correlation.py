@@ -76,7 +76,7 @@ def run_autoRIFT(img1, img2, skip_x=1, skip_y=1, min_x_chip=8, max_x_chip=32,
     obj.ChipSizeMaxX = max_x_chip
     obj.ChipSize0X = min_x_chip
     # oversample ratio, balancing precision and performance for different chip sizes
-    obj.OverSampleRatio = {obj.ChipSize0X:8, obj.ChipSize0X*2:16, obj.ChipSize0X*4:32}
+    #obj.OverSampleRatio = {obj.ChipSize0X:8, obj.ChipSize0X*2:16, obj.ChipSize0X*4:32}
 
     # generate grid
     m,n = obj.I1.shape
@@ -102,14 +102,14 @@ def run_autoRIFT(img1, img2, skip_x=1, skip_y=1, min_x_chip=8, max_x_chip=32,
     obj.NoDataMask = noDataMask
 
     # Consensus gate (NDC) — require more neighbor agreement in a larger window
-    obj.FiltWidth = 11        # was 5; must be odd
+    obj.FiltWidth = 17        # was 5; must be odd
     obj.FracValid = 0.32     # was 0.32 (=8/25)
     
     # Displacement-distance count tolerance (stricter local consistency)
     obj.FracSearch = 0.20    # was 0.20
     
     # MAD outlier gate (tighter)
-    obj.MadScalar = 3.0      # was 4
+    obj.MadScalar = 2.5      # was 4
 
     print("preprocessing images")
     obj.WallisFilterWidth = preproc_filter_width
