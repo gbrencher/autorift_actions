@@ -14,7 +14,7 @@ import numpy as np
 import time
 from rasterio.env import Env
 
-def retry_call(fn, n=5, delay=2):
+def retry_call(fn, n=20, delay=2):
     for i in range(n):
         try:
             return fn()
