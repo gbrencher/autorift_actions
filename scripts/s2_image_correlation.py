@@ -14,7 +14,17 @@ import geopandas as gpd
 from shapely.geometry import shape
 import warnings
 import argparse
-import numpy as np
+import time
+from rasterio.env import Env
+
+def retry_call(fn, n=5, delay=2):
+    for i in range(n):
+        try:
+            return fn()
+        except Exception:
+            if i == n - 1:
+                raise
+            time.sleep(delay * (2 ** i))
 
 # silence some warnings from stackstac and autoRIFT
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -27,33 +37,49 @@ def download_s2(img1_date, img2_date, aoi):
     aoi_gpd = gpd.GeoDataFrame({'geometry':[shape(aoi)]}).set_crs(crs="EPSG:4326")
     crs = aoi_gpd.estimate_utm_crs()
     
-    stac = pystac_client.Client.open(
-    "https://planetarycomputer.microsoft.com/api/stac/v1",
-    modifier=planetary_computer.sign_inplace)
+    stac = retry_call(lambda: pystac_client.Client.open(
+        "https://planetarycomputer.microsoft.com/api/stac/v1",
+        modifier=planetary_computer.sign_inplace
+    ))
 
-    search = stac.search(intersects=aoi,
-                         datetime=img1_date,
-                         collections=["sentinel-2-l2a"])
-    
-    img1_items = search.item_collection()
+    with Env(
+        GDAL_HTTP_MAX_RETRY="5",
+        GDAL_HTTP_RETRY_DELAY="2",
+        GDAL_HTTP_TIMEOUT="60",
+    ):
+        search = retry_call(lambda: stac.search(
+            intersects=aoi,
+            datetime=img1_date,
+            collections=["sentinel-2-l2a"]
+        ))
+        
+        img1_items = retry_call(lambda: search.item_collection())
 
-    img1_ds = odc.stac.load(img1_items,
-                            chunks={"x": 2048, "y": 2048},
-                            bbox=aoi_gpd.total_bounds,
-                            groupby='solar_day').where(lambda x: x > 0, other=np.nan)
-    img1_ds = img1_ds.where(~img1_ds.SCL.isin([8, 9]), other=np.nan)
-    
-    search = stac.search(intersects=aoi,
-                         datetime=img2_date,
-                         collections=["sentinel-2-l2a"])
-    
-    img2_items = search.item_collection()
+        img1_ds = retry_call(lambda: odc.stac.load(
+            img1_items,
+            chunks={"x": 2048, "y": 2048},
+            bbox=aoi_gpd.total_bounds,
+            groupby='solar_day'
+        )).where(lambda x: x > 0, other=np.nan)
 
-    img2_ds = odc.stac.load(img2_items,
-                            chunks={"x": 2048, "y": 2048},
-                            bbox=aoi_gpd.total_bounds,
-                            groupby='solar_day').where(lambda x: x > 0, other=np.nan)
-    img2_ds = img2_ds.where(~img2_ds.SCL.isin([8, 9]), other=np.nan)
+        img1_ds = img1_ds.where(~img1_ds.SCL.isin([8, 9]), other=np.nan)
+        
+        search = retry_call(lambda: stac.search(
+            intersects=aoi,
+            datetime=img2_date,
+            collections=["sentinel-2-l2a"]
+        ))
+        
+        img2_items = retry_call(lambda: search.item_collection())
+
+        img2_ds = retry_call(lambda: odc.stac.load(
+            img2_items,
+            chunks={"x": 2048, "y": 2048},
+            bbox=aoi_gpd.total_bounds,
+            groupby='solar_day'
+        )).where(lambda x: x > 0, other=np.nan)
+
+        img2_ds = img2_ds.where(~img2_ds.SCL.isin([8, 9]), other=np.nan)
 
     return img1_ds, img2_ds 
 
