@@ -11,6 +11,17 @@ import planetary_computer
 import geopandas as gpd
 from shapely.geometry import shape
 import numpy as np
+import time
+from rasterio.env import Env
+
+def retry_call(fn, n=5, delay=2):
+    for i in range(n):
+        try:
+            return fn()
+        except Exception:
+            if i == n - 1:
+                raise
+            time.sleep(delay * (2 ** i))
 
 def get_parser():
     parser = argparse.ArgumentParser(description="Search for Sentinel-2 images")
@@ -65,42 +76,63 @@ def main():
     aoi_gpd = gpd.GeoDataFrame({'geometry':[shape(aoi)]}).set_crs(crs="EPSG:4326")
     crs = aoi_gpd.estimate_utm_crs()
     
-    stac = pystac_client.Client.open(
-    "https://planetarycomputer.microsoft.com/api/stac/v1",
-    modifier=planetary_computer.sign_inplace)
+    stac = retry_call(lambda: pystac_client.Client.open(
+        "https://planetarycomputer.microsoft.com/api/stac/v1",
+        modifier=planetary_computer.sign_inplace
+    ))
 
+    with Env(
+        GDAL_HTTP_MAX_RETRY="5",
+        GDAL_HTTP_RETRY_DELAY="2",
+        GDAL_HTTP_TIMEOUT="60",
+    ):
     # search planetary computer
     search = stac.search(
         intersects=aoi,
         datetime=f'{args.start_year}-01-01/{args.stop_year}-12-31',
         collections=["sentinel-2-l2a"],
-        query={"eo:cloud_cover": {"lt": float(args.cloud_cover)}})
+        query={"eo:cloud_cover": {"lt": float(args.cloud_cover)}}
+    )
 
-    items = search.item_collection()
+    items = retry_call(lambda: search.item_collection())
     
-    s2_ds = odc.stac.load(items,chunks={"x": 2048, "y": 2048},
-                          bbox=aoi_gpd.total_bounds,
-                          groupby='solar_day').where(lambda x: x > 0, other=np.nan)
+    s2_ds = odc.stac.load(
+        items,
+        chunks={"x": 2048, "y": 2048},
+        bbox=aoi_gpd.total_bounds,
+        groupby='solar_day'
+    ).where(lambda x: x > 0, other=np.nan)
+
     print(f"Returned {len(s2_ds.time)} acquisitions")
 
     start_m = int(args.start_month)
     stop_m  = int(args.stop_month)
 
     if start_m <= stop_m:
-        # simple case (e.g., May–September)
-        s2_ds = s2_ds.where((s2_ds.time.dt.month >= start_m) & (s2_ds.time.dt.month <= stop_m), drop=True)
+        s2_ds = s2_ds.where(
+            (s2_ds.time.dt.month >= start_m) & 
+            (s2_ds.time.dt.month <= stop_m),
+            drop=True
+        )
     else:
-        # wrap-around case (e.g., December–February)
-        s2_ds = s2_ds.where((s2_ds.time.dt.month >= start_m) | (s2_ds.time.dt.month <= stop_m), drop=True)
+        s2_ds = s2_ds.where(
+            (s2_ds.time.dt.month >= start_m) | 
+            (s2_ds.time.dt.month <= stop_m),
+            drop=True
+        )
 
     # mask cloud
     s2_ds = s2_ds.where(~s2_ds.SCL.isin([8, 9]), other=np.nan)
     
     # calculate number of valid pixels in each image
-    total_pixels = len(s2_ds.y)*len(s2_ds.x)
-    nan_count = (~np.isnan(s2_ds.B08)).sum(dim=['x', 'y']).compute()
+    total_pixels = len(s2_ds.y) * len(s2_ds.x)
+
+    nan_count = retry_call(
+        lambda: (~np.isnan(s2_ds.B08)).sum(dim=['x', 'y']).compute()
+    )
+
     # keep only images with 90% or more valid pixels
-    s2_ds = s2_ds.where(nan_count >= total_pixels*0.9, drop=True)
+    s2_ds = s2_ds.where(nan_count >= total_pixels * 0.9, drop=True)
 
     # get dates of acceptable images
     image_dates = s2_ds.time.dt.strftime('%Y-%m-%d').values.tolist()
