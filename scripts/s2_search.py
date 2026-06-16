@@ -73,6 +73,18 @@ def main():
         ]
     }
 
+    # Nisqually glacier
+    # aoi = {
+    #     "type": "Polygon",
+    #     "coordinates": [
+    #         [[-121.7772944,46.8520726],
+    #         [-121.7174423,46.8520726],
+    #         [-121.7174423,46.792772],
+    #         [-121.7772944,46.792772],
+    #         [-121.7772944,46.8520726]]
+    #     ]
+    # }
+
     aoi_gpd = gpd.GeoDataFrame({'geometry':[shape(aoi)]}).set_crs(crs="EPSG:4326")
     crs = aoi_gpd.estimate_utm_crs()
     
