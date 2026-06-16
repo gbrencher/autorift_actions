@@ -233,6 +233,18 @@ def main():
         ]
     }
 
+    # Nisqually glacier
+    # aoi = {
+    #     "type": "Polygon",
+    #     "coordinates": [
+    #         [[-121.7772944,46.8520726],
+    #         [-121.7174423,46.8520726],
+    #         [-121.7174423,46.792772],
+    #         [-121.7772944,46.792772],
+    #         [-121.7772944,46.8520726]]
+    #     ]
+    # }
+
     # download Sentinel-2 images
     img1_ds, img2_ds = download_s2(args.img1_date, args.img2_date, aoi)
     # grab near infrared band only
