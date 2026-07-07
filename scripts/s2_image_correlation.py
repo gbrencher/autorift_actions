@@ -16,6 +16,7 @@ import warnings
 import argparse
 import time
 from rasterio.env import Env
+from scipy.interpolate import RegularGridInterpolator
 
 def retry_call(fn, n=5, delay=2):
     for i in range(n):
