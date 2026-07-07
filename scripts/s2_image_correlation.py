@@ -184,6 +184,7 @@ def prep_outputs(obj, img1_ds, img2_ds):
     
     # calculate total horizontal velocity
     img1_ds['veloc_horizontal'] = np.sqrt(img1_ds['veloc_x']**2 + img1_ds['veloc_y']**2)
+    print('finished postprocessing')
 
     return img1_ds
 
@@ -263,6 +264,7 @@ def main():
     # write out velocity to tif
     ds.veloc_x.rio.to_raster(f'S2_{args.img1_date}_{args.img2_date}_veloc_x.tif')
     ds.veloc_y.rio.to_raster(f'S2_{args.img1_date}_{args.img2_date}_veloc_y.tif')
+    print('finished writing velocity maps to disk')
 
 if __name__ == "__main__":
    main()
