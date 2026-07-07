@@ -57,6 +57,7 @@ def download_s2(img1_date, img2_date, aoi):
 
         img1_ds = retry_call(lambda: odc.stac.load(
             img1_items,
+            bands=["B08", "SCL"],
             chunks={"x": 2048, "y": 2048},
             bbox=aoi_gpd.total_bounds,
             groupby='solar_day'
@@ -74,6 +75,7 @@ def download_s2(img1_date, img2_date, aoi):
 
         img2_ds = retry_call(lambda: odc.stac.load(
             img2_items,
+            bands=["B08", "SCL"],
             chunks={"x": 2048, "y": 2048},
             bbox=aoi_gpd.total_bounds,
             groupby='solar_day'
@@ -152,41 +154,178 @@ def run_autoRIFT(img1, img2, skip_x=5, skip_y=5, min_x_chip=8, max_x_chip=32,
         
     return obj
 
-def prep_outputs(obj, img1_ds, img2_ds):
-    '''
-    Interpolate pixel offsets to original dimensions, calculate total horizontal velocity
-    '''
+def _interp_blockwise(
+    values,
+    src_y_idx,
+    src_x_idx,
+    dst_y_idx,
+    dst_x_idx,
+    block_rows=1024,
+    fill_value=np.nan,
+):
+    """
+    Interpolate autoRIFT output from its sparse search grid to a target pixel grid,
+    using row blocks to reduce peak memory use.
+    """
 
-    # interpolate to original dimensions 
-    x_coords = obj.xGrid[0, :]
-    y_coords = obj.yGrid[:, 0]
-    
-    # Create a mesh grid for the img dimensions
-    x_coords_new, y_coords_new = np.meshgrid(
-        np.arange(obj.I2.shape[1]),
-        np.arange(obj.I2.shape[0])
+    values = np.asarray(values, dtype=np.float32)
+
+    interp = RegularGridInterpolator(
+        (src_y_idx, src_x_idx),
+        values,
+        method="linear",
+        bounds_error=False,
+        fill_value=fill_value,
     )
-    
-    # Perform bilinear interpolation using scipy.interpolate.interpn
-    Dx_full = interpn((y_coords, x_coords), obj.Dx, (y_coords_new, x_coords_new), method="linear", bounds_error=False)
-    Dy_full = interpn((y_coords, x_coords), obj.Dy, (y_coords_new, x_coords_new), method="linear", bounds_error=False)
-    Dx_m_full = interpn((y_coords, x_coords), obj.Dx_m, (y_coords_new, x_coords_new), method="linear", bounds_error=False)
-    Dy_m_full = interpn((y_coords, x_coords), obj.Dy_m, (y_coords_new, x_coords_new), method="linear", bounds_error=False)
-    
-    # add variables to img1 dataset
-    img1_ds = img1_ds.assign({'Dx':(['y', 'x'], Dx_full),
-                              'Dy':(['y', 'x'], Dy_full),
-                              'Dx_m':(['y', 'x'], Dx_m_full),
-                              'Dy_m':(['y', 'x'], Dy_m_full)})
-    # calculate x and y velocity
-    img1_ds['veloc_x'] = (img1_ds.Dx_m/(img2_ds.time.isel(time=0) - img1_ds.time.isel(time=0)).dt.days)*365.25
-    img1_ds['veloc_y'] = (img1_ds.Dy_m/(img2_ds.time.isel(time=0) - img1_ds.time.isel(time=0)).dt.days)*365.25
-    
-    # calculate total horizontal velocity
-    img1_ds['veloc_horizontal'] = np.sqrt(img1_ds['veloc_x']**2 + img1_ds['veloc_y']**2)
-    print('finished postprocessing')
 
-    return img1_ds
+    out = np.empty((len(dst_y_idx), len(dst_x_idx)), dtype=np.float32)
+
+    for row0 in range(0, len(dst_y_idx), block_rows):
+        row1 = min(row0 + block_rows, len(dst_y_idx))
+
+        yy, xx = np.meshgrid(
+            dst_y_idx[row0:row1],
+            dst_x_idx,
+            indexing="ij",
+        )
+
+        pts = np.column_stack([
+            yy.ravel(),
+            xx.ravel(),
+        ])
+
+        out[row0:row1, :] = interp(pts).reshape(row1 - row0, len(dst_x_idx)).astype(np.float32)
+
+    return out
+
+
+def prep_outputs(obj, img1_ds, img2_ds, output_resolution=20, block_rows=1024):
+    """
+    Interpolate autoRIFT pixel offsets to a lower-resolution output grid and
+    calculate velocity.
+
+    Assumes obj.Dx_m and obj.Dy_m are already in meters.
+    For your current workflow, input Sentinel-2 B08 is 10 m, so output_resolution=20
+    means every 2nd input pixel.
+
+    Returns an xarray Dataset with 20 m x/y coordinates and float32 outputs.
+    """
+
+    # Get native pixel spacing from the loaded image coordinates
+    xres = float(abs(img1_ds.x.values[1] - img1_ds.x.values[0]))
+    yres = float(abs(img1_ds.y.values[1] - img1_ds.y.values[0]))
+
+    if not np.isclose(xres, yres):
+        raise ValueError(f"Non-square pixels detected: xres={xres}, yres={yres}")
+
+    native_res = xres
+    output_step_px = int(round(output_resolution / native_res))
+
+    if output_step_px < 1:
+        raise ValueError(
+            f"output_resolution={output_resolution} is finer than native_res={native_res}"
+        )
+
+    actual_output_res = native_res * output_step_px
+
+    if not np.isclose(actual_output_res, output_resolution):
+        print(
+            f"Warning: requested {output_resolution} m output, but native resolution "
+            f"{native_res} m gives {actual_output_res} m using integer pixel step "
+            f"{output_step_px}."
+        )
+
+    # Source autoRIFT grid, in original image pixel coordinates
+    src_x_idx = obj.xGrid[0, :].astype(np.float32)
+    src_y_idx = obj.yGrid[:, 0].astype(np.float32)
+
+    # Target output grid, also in original image pixel coordinates
+    # Start/end chosen to stay inside the autoRIFT interpolation domain.
+    dst_x_idx = np.arange(
+        src_x_idx.min(),
+        src_x_idx.max() + 1,
+        output_step_px,
+        dtype=np.float32,
+    )
+
+    dst_y_idx = np.arange(
+        src_y_idx.min(),
+        src_y_idx.max() + 1,
+        output_step_px,
+        dtype=np.float32,
+    )
+
+    print(
+        f"Interpolating autoRIFT output to ~{actual_output_res:.1f} m grid: "
+        f"{len(dst_y_idx)} rows x {len(dst_x_idx)} cols"
+    )
+
+    # Interpolate only meter offsets, not both pixel and meter offsets.
+    # This saves memory.
+    Dx_m = _interp_blockwise(
+        obj.Dx_m,
+        src_y_idx,
+        src_x_idx,
+        dst_y_idx,
+        dst_x_idx,
+        block_rows=block_rows,
+    )
+
+    Dy_m = _interp_blockwise(
+        obj.Dy_m,
+        src_y_idx,
+        src_x_idx,
+        dst_y_idx,
+        dst_x_idx,
+        block_rows=block_rows,
+    )
+
+    # Convert target pixel indices to real-world x/y coordinates.
+    # Use nearest integer pixel indices because output_step_px is integer.
+    dst_x_pix = dst_x_idx.astype(int)
+    dst_y_pix = dst_y_idx.astype(int)
+
+    x_coords = img1_ds.x.values[dst_x_pix]
+    y_coords = img1_ds.y.values[dst_y_pix]
+
+    # Temporal baseline
+    dt_days = (
+        img2_ds.time.isel(time=0) - img1_ds.time.isel(time=0)
+    ).dt.days.item()
+
+    if dt_days == 0:
+        raise ValueError("Image pair has zero-day temporal baseline.")
+
+    veloc_x = (Dx_m / dt_days * 365.25).astype(np.float32)
+    veloc_y = (Dy_m / dt_days * 365.25).astype(np.float32)
+    veloc_horizontal = np.sqrt(veloc_x**2 + veloc_y**2).astype(np.float32)
+
+    out_ds = xr.Dataset(
+        {
+            "Dx_m": (("y", "x"), Dx_m),
+            "Dy_m": (("y", "x"), Dy_m),
+            "veloc_x": (("y", "x"), veloc_x),
+            "veloc_y": (("y", "x"), veloc_y),
+            "veloc_horizontal": (("y", "x"), veloc_horizontal),
+        },
+        coords={
+            "x": x_coords,
+            "y": y_coords,
+        },
+        attrs={
+            "output_resolution_m": float(actual_output_res),
+            "temporal_baseline_days": int(dt_days),
+        },
+    )
+
+    # Preserve CRS if available
+    try:
+        out_ds = out_ds.rio.write_crs(img1_ds.rio.crs)
+    except Exception:
+        pass
+
+    print("finished postprocessing")
+    return out_ds
 
 def get_parser():
     parser = argparse.ArgumentParser(description="Run autoRIFT to find pixel offsets for two Sentinel-2 images")
