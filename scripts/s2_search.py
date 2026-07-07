@@ -146,8 +146,8 @@ def main():
             lambda: (~np.isnan(s2_ds.B08)).sum(dim=['x', 'y']).compute()
         )
     
-        # keep only images with 50% or more valid pixels
-        s2_ds = s2_ds.where(nan_count >= total_pixels * 0.5, drop=True)
+        # keep only images with 75% or more valid pixels
+        s2_ds = s2_ds.where(nan_count >= total_pixels * 0.75, drop=True)
 
     # get dates of acceptable images
     image_dates = s2_ds.time.dt.strftime('%Y-%m-%d').values.tolist()
