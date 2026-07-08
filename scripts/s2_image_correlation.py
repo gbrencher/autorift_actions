@@ -86,7 +86,7 @@ def download_s2(img1_date, img2_date, aoi):
 
     return img1_ds, img2_ds 
 
-def run_autoRIFT(img1, img2, skip_x=5, skip_y=5, min_x_chip=8, max_x_chip=32,
+def run_autoRIFT(img1, img2, skip_x=8, skip_y=8, min_x_chip=16, max_x_chip=64,
                  preproc_filter_width=3, mpflag=4, search_limit_x=30, search_limit_y=30):
     '''
     Configure and run autoRIFT feature tracking with Sentinel-2 data for large mountain glaciers
