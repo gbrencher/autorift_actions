@@ -11,6 +11,17 @@ import planetary_computer
 import geopandas as gpd
 from shapely.geometry import shape
 import numpy as np
+import time
+from rasterio.env import Env
+
+def retry_call(fn, n=20, delay=2):
+    for i in range(n):
+        try:
+            return fn()
+        except Exception:
+            if i == n - 1:
+                raise
+            time.sleep(delay * (2 ** i))
 
 def get_parser():
     parser = argparse.ArgumentParser(description="Search for Sentinel-2 images")
@@ -28,56 +39,134 @@ def main():
     args = parser.parse_args()
     
     # hardcode bbox for now
+    # Emmons glacier 
+    # aoi = {
+    #     "type": "Polygon",
+    #     "coordinates": [
+    #         [[-121.76644001937807,46.83837147698088],
+    #         [-121.6594983841296,46.83837147698088],
+    #         [-121.6594983841296,46.8948204721259],
+    #         [-121.76644001937807,46.8948204721259],
+    #         [-121.76644001937807,46.83837147698088]]
+    #     ]
+    # }
+    # Langtang Lirung
     aoi = {
         "type": "Polygon",
         "coordinates": [
-            [[-121.76644001937807,46.83837147698088],
-            [-121.6594983841296,46.83837147698088],
-            [-121.6594983841296,46.8948204721259],
-            [-121.76644001937807,46.8948204721259],
-            [-121.76644001937807,46.83837147698088]]
+            [[85.45106532784251,
+              28.329196733057444],
+            [85.57124469912793,
+              28.326517780891606],
+            [85.56784713691417,
+              28.25068388419791],
+            [85.45222410419376,
+              28.25035535834364],
+            [85.45106532784251,
+              28.329196733057444]]
         ]
     }
+    
+    
+    
+    # # Juneau Icefield
+    # aoi = {
+    #     "type": "Polygon",
+    #     "coordinates": [
+    #         [[-135.27061670682534,59.57305870964015],
+    #         [-133.51060124884273,59.57188884388103],
+    #         [-133.51037046328878,58.33925381751183],
+    #         [-135.27088827541,58.33767437010192],
+    #         [-135.27061670682534,59.57305870964015]]
+    #     ]
+    # }
+    # Blue Glacier
+    # aoi = {
+    #     "type": "Polygon",
+    #     "coordinates": [
+    #         [[-123.79055865037546,47.758365021326654],
+    #         [-123.6270429827974,47.758365021326654],
+    #         [-123.6270429827974,47.83696563729873],
+    #         [-123.79055865037546,47.83696563729873],
+    #         [-123.79055865037546,47.758365021326654]]
+    #     ]
+    # }
+
+    # Nisqually glacier
+    # aoi = {
+    #     "type": "Polygon",
+    #     "coordinates": [
+    #         [[-121.7772944,46.8520726],
+    #         [-121.7174423,46.8520726],
+    #         [-121.7174423,46.792772],
+    #         [-121.7772944,46.792772],
+    #         [-121.7772944,46.8520726]]
+    #     ]
+    # }
 
     aoi_gpd = gpd.GeoDataFrame({'geometry':[shape(aoi)]}).set_crs(crs="EPSG:4326")
     crs = aoi_gpd.estimate_utm_crs()
     
-    stac = pystac_client.Client.open(
-    "https://planetarycomputer.microsoft.com/api/stac/v1",
-    modifier=planetary_computer.sign_inplace)
+    stac = retry_call(lambda: pystac_client.Client.open(
+        "https://planetarycomputer.microsoft.com/api/stac/v1",
+        modifier=planetary_computer.sign_inplace
+    ))
 
-    # search planetary computer
-    search = stac.search(
-        intersects=aoi,
-        datetime=f'{args.start_year}-01-01/{args.stop_year}-12-31',
-        collections=["sentinel-2-l2a"],
-        query={"eo:cloud_cover": {"lt": float(args.cloud_cover)}})
-
-    items = search.item_collection()
+    with Env(
+        GDAL_HTTP_MAX_RETRY="5",
+        GDAL_HTTP_RETRY_DELAY="2",
+        GDAL_HTTP_TIMEOUT="60",
+    ):
+        # search planetary computer
+        search = stac.search(
+            intersects=aoi,
+            datetime=f'{args.start_year}-01-01/{args.stop_year}-12-31',
+            collections=["sentinel-2-l2a"],
+            query={"eo:cloud_cover": {"lt": float(args.cloud_cover)}}
+        )
     
-    s2_ds = odc.stac.load(items,chunks={"x": 2048, "y": 2048},
-                          bbox=aoi_gpd.total_bounds,
-                          groupby='solar_day').where(lambda x: x > 0, other=np.nan)
-    print(f"Returned {len(s2_ds.time)} acquisitions")
-
-    start_m = int(args.start_month)
-    stop_m  = int(args.stop_month)
-
-    if start_m <= stop_m:
-        # simple case (e.g., May–September)
-        s2_ds = s2_ds.where((s2_ds.time.dt.month >= start_m) & (s2_ds.time.dt.month <= stop_m), drop=True)
-    else:
-        # wrap-around case (e.g., December–February)
-        s2_ds = s2_ds.where((s2_ds.time.dt.month >= start_m) | (s2_ds.time.dt.month <= stop_m), drop=True)
-
-    # mask cloud
-    s2_ds = s2_ds.where(~s2_ds.SCL.isin([8, 9]), other=np.nan)
+        items = retry_call(lambda: search.item_collection())
+        
+        s2_ds = odc.stac.load(
+            items,
+            bands=["B08", "SCL"],
+            chunks={"x": 2048, "y": 2048},
+            resolution=100,          # coarse screening resolution, meters
+            resampling={"B08": "average", "SCL": "nearest"},
+            bbox=aoi_gpd.total_bounds,
+            groupby='solar_day'
+        ).where(lambda x: x > 0, other=np.nan)
     
-    # calculate number of valid pixels in each image
-    total_pixels = len(s2_ds.y)*len(s2_ds.x)
-    nan_count = (~np.isnan(s2_ds.B08)).sum(dim=['x', 'y']).compute()
-    # keep only images with 90% or more valid pixels
-    s2_ds = s2_ds.where(nan_count >= total_pixels*0.9, drop=True)
+        print(f"Returned {len(s2_ds.time)} acquisitions")
+    
+        start_m = int(args.start_month)
+        stop_m  = int(args.stop_month)
+    
+        if start_m <= stop_m:
+            s2_ds = s2_ds.where(
+                (s2_ds.time.dt.month >= start_m) & 
+                (s2_ds.time.dt.month <= stop_m),
+                drop=True
+            )
+        else:
+            s2_ds = s2_ds.where(
+                (s2_ds.time.dt.month >= start_m) | 
+                (s2_ds.time.dt.month <= stop_m),
+                drop=True
+            )
+    
+        # mask cloud
+        s2_ds = s2_ds.where(~s2_ds.SCL.isin([8, 9]), other=np.nan)
+        
+        # calculate number of valid pixels in each image
+        total_pixels = len(s2_ds.y) * len(s2_ds.x)
+    
+        nan_count = retry_call(
+            lambda: (~np.isnan(s2_ds.B08)).sum(dim=['x', 'y']).compute()
+        )
+    
+        # keep only images with 75% or more valid pixels
+        s2_ds = s2_ds.where(nan_count >= total_pixels * 0.75, drop=True)
 
     # get dates of acceptable images
     image_dates = s2_ds.time.dt.strftime('%Y-%m-%d').values.tolist()
