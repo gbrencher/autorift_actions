@@ -1,0 +1,89 @@
+# Split a large multi-year S2 search into shorter periods (year or half-year),
+# each run as its own batch_image_correlation call with its own independent
+# 256-job matrix limit
+name: batch_s2_image_correlation_by_period
+run-name: batch s2 image correlation by period (${{ inputs.chunk_mode }})
+
+on:
+  workflow_dispatch:
+    inputs:
+        cloud_cover:
+            type: string
+            required: true
+            description: percent cloud cover allowed in images (0-100)
+            default: '10'
+        start_year:
+            type: string
+            required: true
+            description: first year to search for images
+            default: '2015'
+        stop_year:
+            type: string
+            required: true
+            description: last year to search for images
+            default: '2025'
+        start_month:
+            type: choice
+            required: true
+            description: first month of year to search for images
+            default: '6'
+            options: ['1','2','3','4','5','6','7','8','9','10','11','12']
+        stop_month:
+            type: choice
+            required: true
+            description: last month of year to search for images
+            default: '9'
+            options: ['1','2','3','4','5','6','7','8','9','10','11','12']
+        min_days:
+            type: string
+            required: true
+            description: minimum temporal baseline (days)
+            default: '25'
+        max_days:
+            type: string
+            required: true
+            description: maximum temporal baseline (days)
+            default: '100'
+        chunk_mode:
+            type: choice
+            required: true
+            description: split the search range by year, or by half-year if a single year still exceeds 256 pairs
+            default: 'year'
+            options: ['year', 'half_year']
+
+jobs:
+  # Split the requested year/month range into shorter periods
+  period_chunks:
+    runs-on: ubuntu-latest
+    outputs:
+      MATRIX: ${{ steps.period_chunks.outputs.MATRIX }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Split search range into periods
+        id: period_chunks
+        run: |
+          python -u scripts/s2_period_chunks.py ${{ inputs.start_year }} ${{ inputs.stop_year }} ${{ inputs.start_month }} ${{ inputs.stop_month }} ${{ inputs.chunk_mode }}
+
+  # One batch_s2_image_correlation run per period, each with its own 256-job matrix limit
+  batch_s2_image_correlation:
+    needs: period_chunks
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.period_chunks.outputs.MATRIX) }}
+    name: ${{ matrix.name }}
+    uses: ./.github/workflows/batch_image_correlation.yml
+    with:
+      cloud_cover: ${{ inputs.cloud_cover }}
+      start_year: ${{ matrix.start_year }}
+      stop_year: ${{ matrix.stop_year }}
+      start_month: ${{ matrix.start_month }}
+      stop_month: ${{ matrix.stop_month }}
+      min_days: ${{ inputs.min_days }}
+      max_days: ${{ inputs.max_days }}

@@ -42,7 +42,33 @@ on:
             required: true
             description: maximum temporal baseline (days)
             default: '100'
-            
+
+  # Must duplicate inputs for workflow_call (https://github.com/orgs/community/discussions/39357)
+  # Note: workflow_call inputs don't support type: choice, so start_month/stop_month are plain strings here
+  workflow_call:
+    inputs:
+        cloud_cover:
+            type: string
+            description: percent cloud cover allowed in images (0-100)
+        start_year:
+            type: string
+            description: first year to search for images
+        stop_year:
+            type: string
+            description: last year to search for images
+        start_month:
+            type: string
+            description: first month of year to search for images
+        stop_month:
+            type: string
+            description: last month of year to search for images
+        min_days:
+            type: string
+            description: minimum temporal baseline (days)
+        max_days:
+            type: string
+            description: maximum temporal baseline (days)
+
 jobs:
   # The output of this job is a JSON mapping for a matrix job
   S2_search:
