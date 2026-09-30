@@ -100,6 +100,12 @@ def run_autoRIFT(img1, img2, skip_x=4, skip_y=4, min_x_chip=16, max_x_chip=64,
     obj.SkipSampleX = skip_x
     obj.SkipSampleY = skip_y
 
+    # Must match the actual spacing between xGrid/yGrid points (built below with
+    # step=SkipSampleX). Left unset, autoRIFT keeps its class default (32px), which
+    # silently disables the ChipSize0/GridSpacing oversample ratio used to size the
+    # multi-resolution consistency (NDC) filters below -- see autoRIFT.py:474-505.
+    obj.GridSpacingX = skip_x
+
     # Kernel sizes to use for correlation
     obj.ChipSizeMinX = min_x_chip
     obj.ChipSizeMaxX = max_x_chip
